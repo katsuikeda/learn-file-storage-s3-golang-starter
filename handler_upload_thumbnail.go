@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/base64"
-	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -44,15 +43,48 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
-	if mediaType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
+	var allowedMIMETypes = []string{
+		"image/jpeg",
+		"image/png",
+		"image/gif",
+		"image/webp",
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type header for thumbnail", nil)
+		return
+	}
+	if !isAllowedContentType(contentType, allowedMIMETypes) {
+		respondWithError(w, http.StatusBadRequest, "Unsupported Content-Type", nil)
 		return
 	}
 
-	data, err := io.ReadAll(file)
+	actualContentType, err := detectFileContentType(file)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error reading file", err)
+		respondWithError(w, http.StatusBadRequest, "Unable to determine file type", err)
+		return
+	}
+	if !isMimeTypeMatch(contentType, actualContentType) {
+		respondWithError(w, http.StatusBadRequest, "Content-Type doesn't match file type", nil)
+		return
+	}
+
+	assetPath, err := getAssetPath(videoID, actualContentType)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get asset path", err)
+		return
+	}
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
+
+	dst, err := os.Create(assetDiskPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create file on Server", err)
+		return
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't save file", err)
 		return
 	}
 
@@ -66,10 +98,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	dataString := base64.StdEncoding.EncodeToString(data)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, dataString)
-
-	video.ThumbnailURL = &dataURL
+	thumbnailURL := cfg.getAssetURL(assetPath)
+	video.ThumbnailURL = &thumbnailURL
 
 	if err := cfg.db.UpdateVideo(video); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
