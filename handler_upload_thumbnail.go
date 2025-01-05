@@ -57,7 +57,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	actualMediaType, err := detectFileMediaType(file)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Unable to determine file type", err)
+		respondWithError(w, http.StatusBadRequest, "Unable to detect file type", err)
 		return
 	}
 	if !isMimeTypeMatch(mediaType, actualMediaType) {
@@ -65,7 +65,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	assetPath, err := getAssetPath(actualMediaType)
+	assetPath, err := getAssetPath(mediaType)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't get asset path", err)
 		return
