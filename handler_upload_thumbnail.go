@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"os"
 
@@ -43,34 +44,28 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
-	var allowedMIMETypes = []string{
-		"image/jpeg",
-		"image/png",
-		"image/gif",
-		"image/webp",
-	}
-
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing Content-Type header for thumbnail", nil)
+	// ParseMediaType returns the media type converted to lowercase and trimmed of white space and a non-nil map.
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid Content-Type header", err)
 		return
 	}
-	if !isAllowedContentType(contentType, allowedMIMETypes) {
-		respondWithError(w, http.StatusBadRequest, "Unsupported Content-Type", nil)
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", nil)
 		return
 	}
 
-	actualContentType, err := detectFileContentType(file)
+	actualMediaType, err := detectFileMediaType(file)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to determine file type", err)
 		return
 	}
-	if !isMimeTypeMatch(contentType, actualContentType) {
+	if !isMimeTypeMatch(mediaType, actualMediaType) {
 		respondWithError(w, http.StatusBadRequest, "Content-Type doesn't match file type", nil)
 		return
 	}
 
-	assetPath, err := getAssetPath(videoID, actualContentType)
+	assetPath, err := getAssetPath(videoID, actualMediaType)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't get asset path", err)
 		return

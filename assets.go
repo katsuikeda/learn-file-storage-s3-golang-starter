@@ -8,21 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 )
 
-func isAllowedContentType(contentType string, allowedMIMETypes []string) bool {
-	for _, allowedType := range allowedMIMETypes {
-		if strings.EqualFold(contentType, allowedType) {
-			return true
-		}
-	}
-	return false
-}
-
-func detectFileContentType(file multipart.File) (string, error) {
+func detectFileMediaType(file multipart.File) (string, error) {
 	// Conventionally, the first 512 bytes of a file are used to determine the file type
 	const sniffLen = 512
 
@@ -42,11 +32,7 @@ func detectFileContentType(file multipart.File) (string, error) {
 }
 
 func isMimeTypeMatch(headerType, actualType string) bool {
-	// Handle cases where the headerType includes additional information
-	// like "image/jpeg; charset=utf-8"
-	headerType = strings.Split(headerType, ";")[0]
-
-	return strings.EqualFold(headerType, actualType)
+	return headerType == actualType
 }
 
 func (cfg apiConfig) ensureAssetsDir() error {
