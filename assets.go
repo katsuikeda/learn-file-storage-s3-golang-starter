@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -8,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-
-	"github.com/google/uuid"
 )
 
 func detectFileMediaType(file multipart.File) (string, error) {
@@ -53,12 +53,21 @@ func mediaTypeToExt(mediaType string) (string, error) {
 	return exts[0], nil
 }
 
-func getAssetPath(videoID uuid.UUID, mediaType string) (string, error) {
+func getAssetPath(mediaType string) (string, error) {
 	ext, err := mediaTypeToExt(mediaType)
 	if err != nil {
 		return "", fmt.Errorf("error determing file extension: %w", err)
 	}
-	return fmt.Sprintf("%s%s", videoID, ext), nil
+
+	randomFileNameLen := 32
+	randomFileNameBuffer := make([]byte, randomFileNameLen)
+	if _, err := rand.Read(randomFileNameBuffer); err != nil {
+		return "", fmt.Errorf("error generating random file name: %w", err)
+	}
+
+	randomFileName := base64.RawURLEncoding.EncodeToString(randomFileNameBuffer)
+
+	return fmt.Sprintf("%s%s", randomFileName, ext), nil
 }
 
 func (cfg apiConfig) getAssetDiskPath(assetPath string) string {

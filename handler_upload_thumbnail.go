@@ -65,7 +65,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	assetPath, err := getAssetPath(videoID, actualMediaType)
+	assetPath, err := getAssetPath(actualMediaType)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't get asset path", err)
 		return
