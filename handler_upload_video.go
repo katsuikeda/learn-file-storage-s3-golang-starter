@@ -1,21 +1,16 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
 	"path"
-	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -146,56 +141,9 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	video.VideoURL = &videoURL
 
 	if err := cfg.db.UpdateVideo(video); err != nil {
-		fmt.Printf("Debug 3 - DB Update error: %v\n", err)
 		respondWithError(w, http.StatusInternalServerError, "Could not update video", err)
 		return
 	}
 
-	signedVideo, err := cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not sign video URL", err)
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, signedVideo)
-}
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	// before uploading video, its videoURL should be nil
-	// just return the video with no videoURL
-	if video.VideoURL == nil {
-		return video, nil
-	}
-
-	parts := strings.Split(*video.VideoURL, ",")
-	if len(parts) != 2 {
-		return video, nil
-	}
-	bucket, key := parts[0], parts[1]
-
-	presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, time.Minute*5)
-	if err != nil {
-		return video, err
-	}
-
-	video.VideoURL = &presignedURL
-	return video, nil
-}
-
-func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
-	if bucket == "" || key == "" {
-		return "", errors.New("bucket and key cannot be empty")
-	}
-
-	presignClient := s3.NewPresignClient(s3Client)
-
-	r, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	}, s3.WithPresignExpires(expireTime))
-	if err != nil {
-		return "", fmt.Errorf("error generating presigned URL: %w", err)
-	}
-
-	return r.URL, nil
+	respondWithJSON(w, http.StatusOK, video)
 }
