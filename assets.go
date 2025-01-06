@@ -57,6 +57,11 @@ func (cfg apiConfig) ensureAssetsDir() error {
 }
 
 func mediaTypeToExt(mediaType string) (string, error) {
+	// Speacial case for MP4 files since exts[0] for "video/mp4" will be ".m4v"
+	if mediaType == "video/mp4" {
+		return ".mp4", nil
+	}
+
 	exts, err := mime.ExtensionsByType(mediaType)
 	if err != nil {
 		return "", fmt.Errorf("error getting file extensions: %w", err)
@@ -97,41 +102,40 @@ func (cfg apiConfig) getObjectURL(key string) string {
 }
 
 func getObjectKeyPrefix(aspectRatio string) string {
-	if aspectRatio == landscape {
+	switch aspectRatio {
+	case landscape:
 		return "landscape"
-	}
-	if aspectRatio == portrait {
+	case portrait:
 		return "portrait"
+	default:
+		return other
 	}
-	return other
 }
 
 func getVideoAspectRatio(filePath string) (string, error) {
-	type parameters struct {
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ffprobe error: %w", err)
+	}
+
+	var output struct {
 		Streams []struct {
 			Width  int `json:"width"`
 			Height int `json:"height"`
 		} `json:"streams"`
 	}
-
-	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
-
-	buf := bytes.NewBuffer(make([]byte, 0))
-	cmd.Stdout = buf
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("error running ffprobe: %w", err)
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		return "", fmt.Errorf("error parsing ffprobe output: %w", err)
+	}
+	if len(output.Streams) == 0 {
+		return "", fmt.Errorf("no video streams found in ffprobe output")
 	}
 
-	params := parameters{}
-	if err := json.Unmarshal(buf.Bytes(), &params); err != nil {
-		return "", fmt.Errorf("error unmarshalling ffprobe output: %w", err)
-	}
-	if len(params.Streams) == 0 {
-		return "", fmt.Errorf("no metadata found in video file")
-	}
-
-	aspectRatio := calcAspectRatio(params.Streams[0].Width, params.Streams[0].Height)
+	aspectRatio := calcAspectRatio(output.Streams[0].Width, output.Streams[0].Height)
 	return aspectRatio, nil
 }
 
@@ -149,4 +153,15 @@ func calcAspectRatio(width int, height int) string {
 	}
 
 	return other
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	outputFilePath := filePath + ".processing"
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputFilePath)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ffmpeg error: %w", err)
+	}
+
+	return outputFilePath, nil
 }
